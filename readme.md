@@ -38,5 +38,3 @@ helper.createNavMesh(scene, {
 
 See the example for usage
 
-[Live demo](niklever.github.io/ThreeJS-NavMesh/example/index.html)
-
