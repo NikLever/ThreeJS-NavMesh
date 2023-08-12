@@ -8,7 +8,7 @@ Use RecastHelper to create a navigation mesh from ThreeJS geometry
 ```
 import { RecastHelper  } from "../recast/RecastHelper.js";
 ```
-4. Create a new instance of RecastHelper
+4. Create a new instance of RecastHelper. If the path to recast.wasm is not ../recast then add the path as a parameter to the constructor.
 ```
 const helper = new RecastHelper();
 ```
