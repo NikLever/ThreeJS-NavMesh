@@ -105,6 +105,7 @@ class RecastHelper{
           faces[i] = i;
         }
 
+        
         if (!this.recast.loadArray(verts, faces)) {
           console.error("error loading navmesh data" );
           return null;
