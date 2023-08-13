@@ -105,11 +105,12 @@ class RecastHelper{
           faces[i] = i;
         }
 
-        
-        if (!this.recast.loadArray(verts, faces)) {
+        const navMesh = new this.recast.NavMesh();
+
+        /*if (!this.recast.loadArray(verts, faces)) {
           console.error("error loading navmesh data" );
           return null;
-        }
+        }*/
 
         const {
           cellSize,
@@ -127,8 +128,7 @@ class RecastHelper{
           detailSampleMaxError
         } = Object.assign({}, this.defaultParams, params || {});
 
-        const status = this.recast.build(
-          cellSize,
+        const config = { cellSize,
           cellHeight,
           agentHeight,
           agentRadius,
@@ -141,9 +141,18 @@ class RecastHelper{
           vertsPerPoly,
           detailSampleDist,
           detailSampleMaxError
-        );
+        };
 
-        if (status !== 0) {
+        navMesh.build( verts, verts.length/3, faces, faces.length/3, config);
+
+        const nm = navMesh.getDebugNavMesh();
+
+        const tris = [];
+        for ( let i=0; i<nm.getTriangleCount(); i++){
+          tris.push(nm.getTriangle(i));
+        }
+
+        /*if (status !== 0) {
           console.error("unknown error building nav mesh", status );
           return null;
         }
@@ -187,7 +196,7 @@ class RecastHelper{
         const mesh = new Mesh(geometry, material);
         mesh.position.y -= cellHeight;
 
-        this.recast.freeNavMesh();
+        this.recast.freeNavMesh();*/
 
         return mesh;
 
