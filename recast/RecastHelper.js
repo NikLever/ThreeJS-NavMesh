@@ -99,7 +99,7 @@ class RecastHelper{
         const mergedGeometry = this.mergeMeshGeometries(meshArray);
         
         const verts = mergedGeometry.attributes.position.array;
-        const faces = new Int32Array(verts.length / 3);
+        const faces = new Int32Array(verts.length);
         
         for (let i = 0; i < faces.length; i++) {
           faces[i] = i;
