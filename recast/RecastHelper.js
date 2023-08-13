@@ -82,123 +82,166 @@ class RecastHelper{
   
     return BufferGeometryUtils.mergeGeometries([geometry, flippedGeometry]);
   }
+  /**
+     * Creates a navigation mesh
+     * @param obj ThreeJS object3d traversed to provide the geometry to compute the navigation mesh
+     * @param params bunch of parameters used to filter geometry
+     */
+  
+  async createNavMesh(obj, parameters){
+    try {
+      await (Recast).call({})
+      //await this.recast.ready;
 
-  async createNavMesh(obj, params){
+      const meshArray = [];
+
+      obj.traverse(object => {
+        if (object.isMesh) {
+          meshArray.push(object);
+        }
+      });
+      
+      const mergedGeometry = this.mergeMeshGeometries(meshArray);
+      
+      const verts = mergedGeometry.attributes.position.array;
+      const faces = new Int32Array(verts.length);
+      
+      for (let i = 0; i < faces.length; i++) {
+        faces[i] = i;
+      }
+
+      this.navMesh = new this.recast.NavMesh();
+      
+      // blocking calls
+      const rc = new this.recast.rcConfig();
+      rc.cs = parameters.cs;
+      rc.ch = parameters.ch;
+      rc.borderSize = parameters.borderSize ? parameters.borderSize : 0;
+      rc.tileSize = parameters.tileSize ? parameters.tileSize : 0;
+      rc.walkableSlopeAngle = parameters.walkableSlopeAngle;
+      rc.walkableHeight = parameters.walkableHeight;
+      rc.walkableClimb = parameters.walkableClimb;
+      rc.walkableRadius = parameters.walkableRadius;
+      rc.maxEdgeLen = parameters.maxEdgeLen;
+      rc.maxSimplificationError = parameters.maxSimplificationError;
+      rc.minRegionArea = parameters.minRegionArea;
+      rc.mergeRegionArea = parameters.mergeRegionArea;
+      rc.maxVertsPerPoly = parameters.maxVertsPerPoly;
+      rc.detailSampleDist = parameters.detailSampleDist;
+      rc.detailSampleMaxError = parameters.detailSampleMaxError;
+      const result = this.navMesh.build(verts, verts.length/3, faces, faces.length, rc);
+    }catch(err){
+      console.error(err);
+      return null;
+    }
+  }
+
+  async createNavMeshX(obj, params){
     
-      try {
-        await this.recast.ready;
+    try {
+      await this.recast.ready;
 
-        const meshArray = [];
+      const meshArray = [];
 
-        obj.traverse(object => {
-          if (object.isMesh) {
-            meshArray.push(object);
-          }
-        });
-        
-        const mergedGeometry = this.mergeMeshGeometries(meshArray);
-        
-        const verts = mergedGeometry.attributes.position.array;
-        const faces = new Int32Array(verts.length / 3);
-        
-        for (let i = 0; i < faces.length; i++) {
-          faces[i] = i;
+      obj.traverse(object => {
+        if (object.isMesh) {
+          meshArray.push(object);
         }
+      });
+      
+      const mergedGeometry = this.mergeMeshGeometries(meshArray);
+      
+      const verts = mergedGeometry.attributes.position.array;
+      const faces = new Int32Array(verts.length / 3);
+      
+      for (let i = 0; i < faces.length; i++) {
+        faces[i] = i;
+      }
 
-        const navMesh = new this.recast.NavMesh();
+      if (!this.recast.loadArray(verts, faces)) {
+        console.error("error loading navmesh data" );
+        return null;
+      }
 
-        /*if (!this.recast.loadArray(verts, faces)) {
-          console.error("error loading navmesh data" );
-          return null;
-        }*/
+      const {
+        cellSize,
+        cellHeight,
+        agentHeight,
+        agentRadius,
+        agentMaxClimb,
+        agentMaxSlope,
+        regionMinSize,
+        regionMergeSize,
+        edgeMaxLen,
+        edgeMaxError,
+        vertsPerPoly,
+        detailSampleDist,
+        detailSampleMaxError
+      } = Object.assign({}, this.defaultParams, params || {});
 
-        const {
-          cellSize,
-          cellHeight,
-          agentHeight,
-          agentRadius,
-          agentMaxClimb,
-          agentMaxSlope,
-          regionMinSize,
-          regionMergeSize,
-          edgeMaxLen,
-          edgeMaxError,
-          vertsPerPoly,
-          detailSampleDist,
-          detailSampleMaxError
-        } = Object.assign({}, this.defaultParams, params || {});
+      const status = this.recast.build(
+        cellSize,
+        cellHeight,
+        agentHeight,
+        agentRadius,
+        agentMaxClimb,
+        agentMaxSlope,
+        regionMinSize,
+        regionMergeSize,
+        edgeMaxLen,
+        edgeMaxError,
+        vertsPerPoly,
+        detailSampleDist,
+        detailSampleMaxError
+      );
 
-        const config = { cellSize,
-          cellHeight,
-          agentHeight,
-          agentRadius,
-          agentMaxClimb,
-          agentMaxSlope,
-          regionMinSize,
-          regionMergeSize,
-          edgeMaxLen,
-          edgeMaxError,
-          vertsPerPoly,
-          detailSampleDist,
-          detailSampleMaxError
-        };
+      if (status !== 0) {
+        console.error("unknown error building nav mesh", status );
+        return null;
+      }
 
-        navMesh.build( verts, verts.length/3, faces, faces.length/3, config);
+      const meshes = this.recast.getMeshes();
+      const wasmVerts = this.recast.getVerts();
+      const vertsDst = new Float32Array(wasmVerts.length);
+      vertsDst.set(wasmVerts);
+      const tris = this.recast.getTris();
 
-        const nm = navMesh.getDebugNavMesh();
+      const indices = new Uint16Array((tris.length / 4) * 3);
+      let index = 0;
 
-        const tris = [];
-        for ( let i=0; i<nm.getTriangleCount(); i++){
-          tris.push(nm.getTriangle(i));
+      const numMeshes = meshes.length / 4;
+
+      for (let i = 0; i < numMeshes; i++) {
+        const meshOffset = i * 4;
+        const meshVertsOffset = meshes[meshOffset];
+        const meshTrisOffset = meshes[meshOffset + 2];
+        const meshNumTris = meshes[meshOffset + 3];
+
+        for (let j = 0; j < meshNumTris; j++) {
+          const triangleOffset = (meshTrisOffset + j) * 4;
+          
+          const a = meshVertsOffset + tris[triangleOffset];
+          const b = meshVertsOffset + tris[triangleOffset + 1];
+          const c = meshVertsOffset + tris[triangleOffset + 2];
+
+          indices[index++] = a;
+          indices[index++] = b;
+          indices[index++] = c;
         }
+      }
 
-        /*if (status !== 0) {
-          console.error("unknown error building nav mesh", status );
-          return null;
-        }
+      const geometry = new BufferGeometry();
+      geometry.setAttribute("position", new Float32BufferAttribute(vertsDst, 3));
+      geometry.setIndex(new Uint16BufferAttribute(indices, 1));
 
-        const meshes = this.recast.getMeshes();
-        const wasmVerts = this.recast.getVerts();
-        const vertsDst = new Float32Array(wasmVerts.length);
-        vertsDst.set(wasmVerts);
-        const tris = this.recast.getTris();
+      const material = new MeshBasicMaterial({ color: 0x0000ff, wireframe: true });
 
-        const indices = new Uint16Array((tris.length / 4) * 3);
-        let index = 0;
+      const mesh = new Mesh(geometry, material);
+      mesh.position.y -= cellHeight;
 
-        const numMeshes = meshes.length / 4;
+      this.recast.freeNavMesh();
 
-        for (let i = 0; i < numMeshes; i++) {
-          const meshOffset = i * 4;
-          const meshVertsOffset = meshes[meshOffset];
-          const meshTrisOffset = meshes[meshOffset + 2];
-          const meshNumTris = meshes[meshOffset + 3];
-
-          for (let j = 0; j < meshNumTris; j++) {
-            const triangleOffset = (meshTrisOffset + j) * 4;
-            
-            const a = meshVertsOffset + tris[triangleOffset];
-            const b = meshVertsOffset + tris[triangleOffset + 1];
-            const c = meshVertsOffset + tris[triangleOffset + 2];
-
-            indices[index++] = a;
-            indices[index++] = b;
-            indices[index++] = c;
-          }
-        }
-
-        const geometry = new BufferGeometry();
-        geometry.setAttribute("position", new Float32BufferAttribute(vertsDst, 3));
-        geometry.setIndex(new Uint16BufferAttribute(indices, 1));
-
-        const material = new MeshBasicMaterial({ color: 0x0000ff, wireframe: true });
-
-        const mesh = new Mesh(geometry, material);
-        mesh.position.y -= cellHeight;
-
-        this.recast.freeNavMesh();*/
-
-        return mesh;
+      return mesh;
 
       } catch (err) {
         console.error(err);
